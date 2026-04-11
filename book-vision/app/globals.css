@@ -116,3 +116,7 @@ body {
 .narration-fade {
   animation: narrationFade 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
+
+.chat-panel-enter {
+  animation: narrationFade 400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}

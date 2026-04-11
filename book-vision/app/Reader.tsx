@@ -34,6 +34,17 @@ type NarrationState =
   | { status: "ready"; text: string; audioUrl: string }
   | { status: "error"; message: string };
 
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface SceneQAResponse {
+  sceneId: number;
+  question: string;
+  answer: string;
+}
+
 interface ParagraphBlock {
   scene: Scene;
   text: string;
@@ -47,6 +58,8 @@ export default function Reader() {
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   const imagesRef = useRef<Record<number, ImageState>>({});
   const narrationsRef = useRef<Record<number, NarrationState>>({});
+  const [chatMessages, setChatMessages] = useState<Record<number, ChatMessage[]>>({});
+  const [chatLoading, setChatLoading] = useState(false);
   const [, forceRender] = useState(0);
   const rerender = useCallback(() => forceRender((n) => n + 1), []);
 
@@ -162,6 +175,52 @@ export default function Reader() {
     [rerender],
   );
 
+  const askQuestion = useCallback(
+    async (question: string, sceneId: number) => {
+      setChatLoading(true);
+      setChatMessages((prev) => ({
+        ...prev,
+        [sceneId]: [...(prev[sceneId] ?? []), { role: "user", content: question }],
+      }));
+      try {
+        const res = await fetch(`/api/scene/${sceneId}/ask`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question }),
+        });
+        const body = (await res.json()) as SceneQAResponse | { error: string };
+        if (!res.ok || "error" in body) {
+          setChatMessages((prev) => ({
+            ...prev,
+            [sceneId]: [
+              ...(prev[sceneId] ?? []),
+              {
+                role: "assistant",
+                content: `Error: ${"error" in body ? body.error : "failed to get answer"}`,
+              },
+            ],
+          }));
+        } else {
+          setChatMessages((prev) => ({
+            ...prev,
+            [sceneId]: [...(prev[sceneId] ?? []), { role: "assistant", content: body.answer }],
+          }));
+        }
+      } catch (e) {
+        setChatMessages((prev) => ({
+          ...prev,
+          [sceneId]: [
+            ...(prev[sceneId] ?? []),
+            { role: "assistant", content: `Error: ${(e as Error).message}` },
+          ],
+        }));
+      } finally {
+        setChatLoading(false);
+      }
+    },
+    [],
+  );
+
   const scrollToScene = useCallback((sceneId: number) => {
     const el = document.querySelector<HTMLElement>(`[data-scene-id="${sceneId}"]`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -261,6 +320,11 @@ export default function Reader() {
           narration={currentNarration}
           onNarrate={() => {
             if (currentSceneId != null) fetchNarration(currentSceneId);
+          }}
+          chatMessages={currentSceneId != null ? chatMessages[currentSceneId] ?? [] : []}
+          chatLoading={chatLoading}
+          onAskQuestion={(question) => {
+            if (currentSceneId != null) askQuestion(question, currentSceneId);
           }}
         />
       </div>
@@ -496,6 +560,9 @@ function ImagePanel({
   onReveal,
   narration,
   onNarrate,
+  chatMessages,
+  chatLoading,
+  onAskQuestion,
 }: {
   current: ImageState | undefined;
   currentScene: Scene | null;
@@ -506,6 +573,9 @@ function ImagePanel({
   onReveal: () => void;
   narration: NarrationState | undefined;
   onNarrate: () => void;
+  chatMessages: ChatMessage[];
+  chatLoading: boolean;
+  onAskQuestion: (question: string) => void;
 }) {
   return (
     <aside className="relative hidden border-l border-[var(--paper-border)] lg:block">
@@ -579,25 +649,37 @@ function ImagePanel({
             )}
           </button>
 
-          <div className="mt-6 w-full max-w-xl text-center">
-            <div className="mb-2 flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.3em] text-[var(--paper-faint)]">
-              <span className="inline-block h-px w-6 bg-[var(--paper-border)]" />
-              {currentScene ? `Scene ${currentIdx + 1} of ${totalScenes}` : "ready"}
-              <span className="inline-block h-px w-6 bg-[var(--paper-border)]" />
-            </div>
-            {currentScene && (
-              <div className="font-serif text-[13px] italic leading-relaxed text-[var(--paper-faint)]">
-                {currentScene.summary}
+          {currentScene ? (
+            <div key={currentScene.id} className="w-full max-w-xl">
+              <div className="mt-6 w-full text-center">
+                <div className="mb-2 flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.3em] text-[var(--paper-faint)]">
+                  <span className="inline-block h-px w-6 bg-[var(--paper-border)]" />
+                  Scene {currentIdx + 1} of {totalScenes}
+                  <span className="inline-block h-px w-6 bg-[var(--paper-border)]" />
+                </div>
+                <div className="font-serif text-[13px] italic leading-relaxed text-[var(--paper-faint)]">
+                  {currentScene.summary}
+                </div>
               </div>
-            )}
-          </div>
 
-          {currentScene && (
-            <NarrateDock
-              key={currentScene.id}
-              narration={narration}
-              onNarrate={onNarrate}
-            />
+              <NarrateDock narration={narration} onNarrate={onNarrate} />
+
+              <ChatPanel
+                messages={chatMessages}
+                loading={chatLoading}
+                onAskQuestion={onAskQuestion}
+                sceneId={currentScene.id}
+                totalScenes={totalScenes}
+              />
+            </div>
+          ) : (
+            <div className="mt-6 w-full max-w-xl text-center">
+              <div className="mb-2 flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.3em] text-[var(--paper-faint)]">
+                <span className="inline-block h-px w-6 bg-[var(--paper-border)]" />
+                ready
+                <span className="inline-block h-px w-6 bg-[var(--paper-border)]" />
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -762,6 +844,168 @@ function NarrateDock({
       {narration?.status === "error" && (
         <div className="narration-fade mt-4 w-full rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-[11px] text-red-700">
           {narration.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatPanel({
+  messages,
+  loading,
+  onAskQuestion,
+  sceneId,
+  totalScenes,
+}: {
+  messages: ChatMessage[];
+  loading: boolean;
+  onAskQuestion: (question: string) => void;
+  sceneId: number;
+  totalScenes: number;
+}) {
+  const [input, setInput] = useState("");
+  const [isExpanded, setIsExpanded] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || loading) return;
+    onAskQuestion(input.trim());
+    setInput("");
+  };
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  const suggestedQuestions = [
+    "Who is in this scene?",
+    "What's happening here?",
+    "Why did they do that?",
+    "What is this location?",
+  ];
+
+  return (
+    <div className="mt-8 w-full max-w-xl">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="group flex w-full items-center justify-between rounded-2xl border border-[var(--paper-border)] bg-[var(--paper-elevated)] px-5 py-3 shadow-sm transition-all duration-200 hover:border-[var(--accent-soft)]"
+      >
+        <div className="flex items-center gap-2">
+          <span className="inline-block h-2 w-2 rounded-full bg-[var(--accent)]" />
+          <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-[var(--foreground)]">
+            Ask Questions
+          </span>
+          {messages.length > 0 && (
+            <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] font-mono text-[9px] text-white">
+              {messages.filter((m) => m.role === "user").length}
+            </span>
+          )}
+        </div>
+        <svg
+          className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="var(--paper-faint)"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <path d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isExpanded && (
+        <div className="chat-panel-enter mt-4 rounded-2xl border border-[var(--paper-border)] bg-[var(--paper-elevated)] shadow-sm">
+          <div className="border-b border-[var(--paper-border)] px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="text-[9px] uppercase tracking-[0.3em] text-[var(--paper-faint)]">
+                Spoiler-Safe Zone
+              </div>
+              <div className="font-mono text-[9px] tabular-nums text-[var(--accent-soft)]">
+                Up to Scene {sceneId}/{totalScenes}
+              </div>
+            </div>
+          </div>
+
+          <div className="max-h-[300px] overflow-y-auto px-4 py-3">
+            {messages.length === 0 ? (
+              <div className="space-y-2">
+                <p className="text-[11px] leading-relaxed text-[var(--paper-dim)]">
+                  Ask me anything about the story up to this point. I won't spoil future events!
+                </p>
+                <div className="mt-3 space-y-1.5">
+                  {suggestedQuestions.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => {
+                        setInput(q);
+                      }}
+                      className="block w-full rounded-lg border border-[var(--paper-border)] bg-[var(--paper)] px-3 py-2 text-left text-[10px] text-[var(--paper-dim)] transition-colors hover:border-[var(--accent-soft)] hover:text-[var(--foreground)]"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {messages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-[var(--accent)] text-white"
+                          : "border border-[var(--paper-border)] bg-[var(--paper)] text-[var(--foreground)]"
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+                {loading && (
+                  <div className="flex justify-start">
+                    <div className="flex items-center gap-2 rounded-2xl border border-[var(--paper-border)] bg-[var(--paper)] px-3 py-2">
+                      <div
+                        className="h-2 w-2 animate-spin rounded-full border"
+                        style={{
+                          borderColor: "var(--paper-border)",
+                          borderTopColor: "var(--accent)",
+                        }}
+                      />
+                      <span className="text-[10px] text-[var(--paper-faint)]">Thinking...</span>
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          <form onSubmit={handleSubmit} className="border-t border-[var(--paper-border)] p-3">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask a question..."
+                disabled={loading}
+                className="flex-1 rounded-lg border border-[var(--paper-border)] bg-[var(--paper)] px-3 py-2 text-[12px] text-[var(--foreground)] placeholder-[var(--paper-faint)] outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || loading}
+                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.2em] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                Ask
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
