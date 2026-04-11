@@ -37,12 +37,15 @@ type NarrationState =
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  audioUrl?: string | null;
+  autoplay?: boolean;
 }
 
 interface SceneQAResponse {
   sceneId: number;
   question: string;
   answer: string;
+  audioUrl: string | null;
 }
 
 interface ParagraphBlock {
@@ -203,7 +206,15 @@ export default function Reader() {
         } else {
           setChatMessages((prev) => ({
             ...prev,
-            [sceneId]: [...(prev[sceneId] ?? []), { role: "assistant", content: body.answer }],
+            [sceneId]: [
+              ...(prev[sceneId] ?? []),
+              {
+                role: "assistant",
+                content: body.answer,
+                audioUrl: body.audioUrl,
+                autoplay: true,
+              },
+            ],
           }));
         }
       } catch (e) {
@@ -577,6 +588,16 @@ function ImagePanel({
   chatLoading: boolean;
   onAskQuestion: (question: string) => void;
 }) {
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
+  useEffect(() => {
+    if (currentScene == null) return;
+    setIsDemoLoading(true);
+    const t = setTimeout(() => setIsDemoLoading(false), 3200);
+    return () => clearTimeout(t);
+  }, [currentScene?.id]);
+
+  const showLoading = current?.status === "loading" || isDemoLoading;
+
   return (
     <aside className="relative hidden border-l border-[var(--paper-border)] lg:block">
       <div className="dot-grid sticky top-[65px] h-[calc(100vh-65px)] overflow-hidden bg-[var(--paper)]">
@@ -605,7 +626,7 @@ function ImagePanel({
             onClick={shouldBlur ? onReveal : undefined}
             className="soft-shadow relative aspect-[4/3] w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--paper-border)] bg-[var(--paper-elevated)]"
           >
-            {current?.status === "ready" ? (
+            {current?.status === "ready" && !showLoading ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 key={current.url}
@@ -615,18 +636,43 @@ function ImagePanel({
                   shouldBlur ? "scale-110 blur-2xl" : "blur-0"
                 }`}
               />
-            ) : current?.status === "loading" ? (
-              <div className="flex h-full w-full items-center justify-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div
-                    className="h-5 w-5 animate-spin rounded-full border"
-                    style={{
-                      borderColor: "var(--paper-border)",
-                      borderTopColor: "var(--accent)",
-                    }}
-                  />
-                  <div className="text-[10px] uppercase tracking-[0.3em] text-[var(--paper-faint)]">
-                    imagining
+            ) : showLoading ? (
+              <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
+                <span
+                  className="ink-bloom"
+                  style={{ left: "12%", top: "18%" }}
+                />
+                <span
+                  className="ink-bloom"
+                  style={{ right: "14%", top: "28%", animationDelay: "1.1s" }}
+                />
+                <span
+                  className="ink-bloom"
+                  style={{ left: "38%", bottom: "12%", animationDelay: "2.2s" }}
+                />
+                <span
+                  className="ink-bloom"
+                  style={{ right: "32%", bottom: "22%", animationDelay: "3.3s" }}
+                />
+                <span className="shimmer-sweep" />
+
+                <div className="relative z-10 flex flex-col items-center gap-4">
+                  <div className="flex items-center gap-2 rounded-full border border-[var(--paper-border)] bg-[var(--paper-elevated)]/85 px-4 py-2 shadow-sm backdrop-blur">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inset-0 animate-ping rounded-full bg-[var(--accent)] opacity-70" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--accent)]" />
+                    </span>
+                    <span className="text-[10px] uppercase tracking-[0.28em] text-[var(--foreground)]">
+                      Conjuring scene
+                    </span>
+                    <span className="flex items-end gap-[3px]">
+                      <span className="dot-bounce inline-block h-1 w-1 rounded-full bg-[var(--accent)]" />
+                      <span className="dot-bounce inline-block h-1 w-1 rounded-full bg-[var(--accent)]" />
+                      <span className="dot-bounce inline-block h-1 w-1 rounded-full bg-[var(--accent)]" />
+                    </span>
+                  </div>
+                  <div className="font-serif text-[11px] italic text-[var(--paper-faint)]">
+                    brushstrokes finding the page
                   </div>
                 </div>
               </div>
@@ -737,6 +783,15 @@ function NarrateDock({
 
   return (
     <div className="mt-8 flex w-full max-w-xl flex-col items-center">
+      <div className="relative flex h-14 w-14 items-center justify-center">
+        {isPlaying && (
+          <>
+            <span aria-hidden className="glow-halo" />
+            <span aria-hidden className="sonar-ring" />
+            <span aria-hidden className="sonar-ring" />
+            <span aria-hidden className="sonar-ring" />
+          </>
+        )}
       <button
         type="button"
         onClick={handleClick}
@@ -817,7 +872,8 @@ function NarrateDock({
           </svg>
         )}
       </button>
-      <div className="mt-3 text-[10px] uppercase tracking-[0.28em] text-[var(--paper-faint)]">
+      </div>
+      <div className="mt-5 text-[10px] uppercase tracking-[0.28em] text-[var(--paper-faint)]">
         {label}
       </div>
 
@@ -952,22 +1008,17 @@ function ChatPanel({
               </div>
             ) : (
               <div className="space-y-3">
-                {messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-[var(--accent)] text-white"
-                          : "border border-[var(--paper-border)] bg-[var(--paper)] text-[var(--foreground)]"
-                      }`}
-                    >
-                      {msg.content}
+                {messages.map((msg, i) =>
+                  msg.role === "user" ? (
+                    <div key={i} className="flex justify-end">
+                      <div className="max-w-[85%] rounded-2xl bg-[var(--accent)] px-3 py-2 text-[12px] leading-relaxed text-white">
+                        {msg.content}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ) : (
+                    <AssistantBubble key={i} message={msg} />
+                  ),
+                )}
                 {loading && (
                   <div className="flex justify-start">
                     <div className="flex items-center gap-2 rounded-2xl border border-[var(--paper-border)] bg-[var(--paper)] px-3 py-2">
@@ -1008,6 +1059,115 @@ function ChatPanel({
           </form>
         </div>
       )}
+    </div>
+  );
+}
+
+function AssistantBubble({ message }: { message: ChatMessage }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const hasAutoplayedRef = useRef(false);
+
+  useEffect(() => {
+    if (!message.autoplay || hasAutoplayedRef.current) return;
+    if (!message.audioUrl) return;
+    const el = audioRef.current;
+    if (!el) return;
+    hasAutoplayedRef.current = true;
+    el.play().then(() => setIsPlaying(true)).catch(() => {});
+  }, [message.autoplay, message.audioUrl]);
+
+  const toggle = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (isPlaying) {
+      el.pause();
+    } else {
+      el.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+  };
+
+  const fakeBarHeights = [
+    35, 62, 88, 50, 74, 42, 95, 58, 40, 82, 54, 68, 92, 46, 78, 38, 66, 84, 48, 72, 56, 90,
+  ];
+
+  return (
+    <div className="flex justify-start">
+      <div
+        className={`relative max-w-[85%] overflow-hidden rounded-2xl border border-[var(--paper-border)] bg-[var(--paper)] px-3 py-2 text-[12px] leading-relaxed text-[var(--foreground)] ${
+          isPlaying ? "bubble-speaking" : ""
+        }`}
+      >
+        {isPlaying && <span aria-hidden className="bubble-shimmer" />}
+        <div className="relative flex items-start gap-2">
+          <div className="flex-1">{message.content}</div>
+          {message.audioUrl && (
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={isPlaying ? "Pause" : "Play"}
+              className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-[var(--paper-border)] transition-colors ${
+                isPlaying
+                  ? "bg-[var(--accent)]"
+                  : "bg-[var(--paper-elevated)] hover:border-[var(--accent-soft)]"
+              }`}
+            >
+              {isPlaying ? (
+                <div className="flex h-2.5 items-end gap-[2px]">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="wave-bar block w-[2px] rounded-full"
+                      style={{ height: "100%", background: "var(--paper-elevated)" }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="var(--accent)"
+                  stroke="var(--accent)"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                >
+                  <polygon points="6 4 20 12 6 20 6 4" />
+                </svg>
+              )}
+            </button>
+          )}
+        </div>
+        {isPlaying && (
+          <div
+            aria-hidden
+            className="relative mt-2 flex h-5 items-end gap-[2px] border-t border-dashed border-[var(--paper-border)] pt-2"
+          >
+            {fakeBarHeights.map((h, i) => (
+              <span
+                key={i}
+                className="wave-bar flex-1 rounded-full bg-[var(--accent)]"
+                style={{
+                  height: `${h}%`,
+                  animationDelay: `${(i * 0.07) % 1.1}s`,
+                  animationDuration: `${0.85 + (i % 5) * 0.08}s`,
+                  opacity: 0.75,
+                }}
+              />
+            ))}
+          </div>
+        )}
+        {message.audioUrl && (
+          <audio
+            ref={audioRef}
+            src={message.audioUrl}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
+            preload="auto"
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { loadBible, loadBook } from "@/lib/store";
 import { answerQuestion } from "@/lib/qa-context";
+import { synthesizeNarration } from "@/lib/narration";
 
 export async function POST(
   req: NextRequest,
@@ -33,10 +34,19 @@ export async function POST(
       question,
     });
 
+    let audioUrl: string | null = null;
+    try {
+      const audio = await synthesizeNarration(answer);
+      audioUrl = audio.audioUrl;
+    } catch (err) {
+      console.error("TTS synthesis failed:", err);
+    }
+
     return Response.json({
       sceneId,
       question,
       answer,
+      audioUrl,
     });
   } catch (err) {
     console.error(err);
