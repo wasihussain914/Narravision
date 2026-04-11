@@ -13,7 +13,7 @@ function getGemini(): GoogleGenAI {
   return client;
 }
 
-const IMAGE_MODEL = "gemini-2.5-flash-image";
+const IMAGE_MODEL = "gemini-3-pro-image-preview";
 
 function ensureImagesDir(): string {
   const dir = resolve(process.cwd(), "public/images");
