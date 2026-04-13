@@ -1,4 +1,4 @@
-import { getAnthropic, CLAUDE_MODEL } from "./anthropic";
+import { getGemini, GEMINI_TEXT_MODEL } from "./gemini";
 import type { Character, Location, Scene, StoryBible } from "./types";
 
 const QA_SYSTEM_PROMPT = `You are a helpful literary companion assisting a reader as they progress through a book.
@@ -84,32 +84,25 @@ export async function answerQuestion({
 }: QAInput): Promise<string> {
   const context = buildSpoilerFreeContext(bible, scene, bookText);
 
-  const response = await getAnthropic().messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 1000,
-    system: [
-      {
-        type: "text",
-        text: QA_SYSTEM_PROMPT,
-      },
-      {
-        type: "text",
-        text: context,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: question,
-      },
-    ],
+  const prompt = `${QA_SYSTEM_PROMPT}
+
+${context}
+
+READER'S QUESTION: ${question}`;
+
+  const response = await getGemini().models.generateContent({
+    model: GEMINI_TEXT_MODEL,
+    contents: prompt,
+    config: {
+      maxOutputTokens: 1000,
+      temperature: 0.7,
+    },
   });
 
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Claude returned no text response");
+  const textPart = response.candidates?.[0]?.content?.parts?.find((p) => p.text);
+  if (!textPart || !textPart.text) {
+    throw new Error("Gemini returned no text response");
   }
 
-  return textBlock.text.trim();
+  return textPart.text.trim();
 }

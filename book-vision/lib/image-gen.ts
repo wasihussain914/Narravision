@@ -1,19 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { GoogleGenAI, Modality } from "@google/genai";
-
-let client: GoogleGenAI | null = null;
-function getGemini(): GoogleGenAI {
-  if (client) return client;
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not set");
-  }
-  client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  return client;
-}
-
-const IMAGE_MODEL = "gemini-3-pro-image-preview";
+import { Modality } from "@google/genai";
+import { getGemini, GEMINI_IMAGE_MODEL } from "./gemini";
 
 function ensureImagesDir(): string {
   const dir = resolve(process.cwd(), "public/images");
@@ -42,7 +31,7 @@ export async function generateImage(prompt: string): Promise<GeneratedImage> {
   }
 
   const response = await getGemini().models.generateContent({
-    model: IMAGE_MODEL,
+    model: GEMINI_IMAGE_MODEL,
     contents: prompt,
     config: {
       responseModalities: [Modality.IMAGE],

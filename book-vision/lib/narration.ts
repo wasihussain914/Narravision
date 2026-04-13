@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { getAnthropic, CLAUDE_MODEL } from "./anthropic";
+import { getGemini, GEMINI_TEXT_MODEL } from "./gemini";
 import type { Scene, StoryBible } from "./types";
 
 const NARRATION_SYSTEM = `You are a warm, thoughtful literary companion speaking aloud to someone who is reading a book right now. Given the story bible and the current scene, write 2-3 short sentences of spoken context for the listener. Focus on: who is present in this moment, the emotional or thematic shift happening here, and one observation that deepens the reading. Do NOT spoil anything beyond this scene. Do NOT summarize the plot broadly. Speak naturally, like a friend sitting next to them. Output plain prose only — no headings, no quotes, no stage directions, no markdown.`;
@@ -34,18 +34,24 @@ export async function buildNarrationText({
     sceneText,
   ].join("\n");
 
-  const res = await getAnthropic().messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 220,
-    system: NARRATION_SYSTEM,
-    messages: [{ role: "user", content: context }],
+  const prompt = `${NARRATION_SYSTEM}
+
+${context}`;
+
+  const res = await getGemini().models.generateContent({
+    model: GEMINI_TEXT_MODEL,
+    contents: prompt,
+    config: {
+      maxOutputTokens: 220,
+      temperature: 0.7,
+    },
   });
 
-  const block = res.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") {
-    throw new Error("Claude returned no narration text");
+  const textPart = res.candidates?.[0]?.content?.parts?.find((p) => p.text);
+  if (!textPart || !textPart.text) {
+    throw new Error("Gemini returned no narration text");
   }
-  return block.text.trim();
+  return textPart.text.trim();
 }
 
 const CARTESIA_URL = "https://api.cartesia.ai/tts/bytes";

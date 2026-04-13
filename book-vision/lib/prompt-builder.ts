@@ -1,4 +1,4 @@
-import { getAnthropic, CLAUDE_MODEL } from "./anthropic";
+import { getGemini, GEMINI_TEXT_MODEL } from "./gemini";
 import type { Character, Location, Scene, StoryBible } from "./types";
 
 const PROMPT_SYSTEM = `You write single-paragraph illustration prompts for an image model.
@@ -69,23 +69,24 @@ export async function buildImagePrompt({
     sceneText,
   ].join("\n");
 
-  const response = await getAnthropic().messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 400,
-    system: PROMPT_SYSTEM,
-    messages: [
-      {
-        role: "user",
-        content: contextBlock,
-      },
-    ],
+  const prompt = `${PROMPT_SYSTEM}
+
+${contextBlock}`;
+
+  const response = await getGemini().models.generateContent({
+    model: GEMINI_TEXT_MODEL,
+    contents: prompt,
+    config: {
+      maxOutputTokens: 400,
+      temperature: 0.7,
+    },
   });
 
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Claude returned no prompt text");
+  const textPart = response.candidates?.[0]?.content?.parts?.find((p) => p.text);
+  if (!textPart || !textPart.text) {
+    throw new Error("Gemini returned no prompt text");
   }
-  return textBlock.text.trim();
+  return textPart.text.trim();
 }
 
 export function getSceneText(bible: StoryBible, scene: Scene, bookText: string): string {
