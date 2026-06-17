@@ -7,8 +7,12 @@ The Next.js app for Narravision. See the [root README](../README.md) for full se
 ```bash
 npm install
 cp .env.local.example .env.local   # fill in API keys
-# drop a plaintext book at data/book.txt, then:
-npm run ingest                      # build story bible (~30–60s)
+
+# Drop your book's plain text into data/book.txt
+# (see data/book.txt.example for format + tips; Project Gutenberg .txt files work great)
+cp data/book.txt.example data/book.txt   # then replace the sample text with your book
+
+npm run ingest                      # build story bible (~30–60s, calls Claude)
 npm run dev                         # open http://localhost:3000
 ```
 

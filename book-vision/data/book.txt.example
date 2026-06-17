@@ -1,0 +1,24 @@
+# data/book.txt — drop your book here before running ingest
+#
+# How to use:
+#   1. Copy or paste your book's full plain text into a file named  data/book.txt
+#      (this file is a template — rename or copy it).
+#   2. UTF-8 encoding, no special formatting needed. Project Gutenberg downloads
+#      (.txt) work great out of the box.
+#   3. Run:  npm run ingest
+#      This reads data/book.txt → calls Claude → writes data/bible.json
+#   4. Start the app:  npm run dev
+#
+# Limits:
+#   • Default max: 200 000 characters (roughly a full novel). Override with
+#     MAX_BOOK_CHARS=500000 npm run ingest
+#   • data/book.txt is gitignored (copyrighted content stays local).
+#
+# Example first lines (replace with your book):
+
+The Project Gutenberg EBook of Pride and Prejudice, by Jane Austen
+
+CHAPTER 1
+
+It is a truth universally acknowledged, that a single man in possession of
+a good fortune, must be in want of a wife.
