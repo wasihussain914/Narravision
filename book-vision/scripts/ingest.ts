@@ -1,3 +1,28 @@
+/**
+ * scripts/ingest.ts — one-time ingestion step that must be run before starting
+ * the dev server.
+ *
+ * What it does:
+ *   1. Reads the raw book text from  data/book.txt  (plain UTF-8, any length).
+ *   2. Calls Claude via buildStoryBible() to extract a structured "story bible":
+ *      characters, locations, scenes (with char-offset ranges), and art direction.
+ *   3. Writes the result to  data/bible.json, which the Next.js app and API routes
+ *      use at runtime to generate per-scene illustrations and answer reader Q&A.
+ *
+ * How to run:
+ *   npx tsx scripts/ingest.ts
+ *   (requires .env.local with ANTHROPIC_API_KEY set; see .env.local.example)
+ *
+ * Env vars (all optional unless noted):
+ *   ANTHROPIC_API_KEY  — required; used by buildStoryBible to call Claude
+ *   BOOK_TITLE         — display title embedded in the bible (default: "Untitled")
+ *   MAX_BOOK_CHARS     — character limit before truncation (default: 200 000).
+ *                        If the book exceeds this, data/book.txt is overwritten
+ *                        with the truncated copy so the bible and reader stay in sync.
+ *
+ * Inputs / outputs at a glance:
+ *   data/book.txt  →  [ingest.ts]  →  data/bible.json
+ */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { config } from "dotenv";
