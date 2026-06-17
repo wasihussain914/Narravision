@@ -6,12 +6,26 @@ import type { Scene, StoryBible } from "./types";
 
 const NARRATION_SYSTEM = `You are a warm, thoughtful literary companion speaking aloud to someone who is reading a book right now. Given the story bible and the current scene, write 2-3 short sentences of spoken context for the listener. Focus on: who is present in this moment, the emotional or thematic shift happening here, and one observation that deepens the reading. Do NOT spoil anything beyond this scene. Do NOT summarize the plot broadly. Speak naturally, like a friend sitting next to them. Output plain prose only — no headings, no quotes, no stage directions, no markdown.`;
 
+/** Inputs required to generate a spoken narration snippet for a scene. */
 export interface NarrationInput {
+  /** The story bible produced by {@link buildStoryBible} — supplies character details and title. */
   bible: StoryBible;
+  /** The scene descriptor from the bible (id, char offsets, summary, present characters). */
   scene: Scene;
+  /** Raw book text for this scene, used as grounding context for Claude. */
   sceneText: string;
 }
 
+/**
+ * Asks Claude to write 2-3 sentences of spoken scene context ("warm literary companion" style).
+ *
+ * Builds a structured prompt from the story bible and scene text, then calls
+ * {@link CLAUDE_MODEL} with a 220-token budget. Returns the trimmed plain-prose narration.
+ *
+ * @param input - Story bible, scene descriptor, and raw scene text.
+ * @returns Plain-prose narration suitable for TTS synthesis.
+ * @throws {Error} If Claude returns a response with no text content block.
+ */
 export async function buildNarrationText({
   bible,
   scene,
@@ -64,11 +78,31 @@ function hashText(text: string, voiceId: string): string {
   return createHash("sha256").update(`${voiceId}::${text}`).digest("hex").slice(0, 16);
 }
 
+/** Return value from {@link synthesizeNarration}. */
 export interface GeneratedNarration {
+  /** Relative URL to the generated MP3, e.g. `/audio/<hash>.mp3`. Served from `public/audio/`. */
   audioUrl: string;
+  /** `true` if the audio file already existed on disk and the Cartesia API was not called. */
   cached: boolean;
 }
 
+/**
+ * Converts a narration text string to an MP3 file via the Cartesia TTS API and returns its URL.
+ *
+ * Uses the **sonic-2** model with 128 kbps / 44.1 kHz MP3 output. Results are content-addressed
+ * (SHA-256 of `voiceId::text`, first 16 hex chars) and stored under `public/audio/` so repeated
+ * calls with identical text and voice are served from disk without hitting the API.
+ *
+ * @param text - Plain prose to synthesize (output of {@link buildNarrationText}).
+ * @returns `{ audioUrl, cached }` — relative URL and whether the file was already cached.
+ *
+ * @throws {Error} If `CARTESIA_API_KEY` is not set in the environment.
+ * @throws {Error} If the Cartesia API returns a non-2xx status.
+ *
+ * @env CARTESIA_API_KEY  Required. Your Cartesia API key.
+ * @env CARTESIA_VOICE_ID Optional. Override the default warm narrator voice
+ *   (`a0e99841-438c-4a64-b679-ae501e7d6091`). Must be a valid Cartesia voice ID.
+ */
 export async function synthesizeNarration(text: string): Promise<GeneratedNarration> {
   if (!process.env.CARTESIA_API_KEY) {
     throw new Error("CARTESIA_API_KEY is not set");
