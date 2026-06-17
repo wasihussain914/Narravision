@@ -30,6 +30,23 @@ Schema:
   }]
 }`;
 
+/**
+ * Analyzes a book's full text with Claude and returns a structured Story Bible.
+ *
+ * Sends the entire `bookText` to Claude in a single call (with prompt caching on
+ * the book content block) and asks it to extract cast, settings, art direction,
+ * and a scene index with zero-indexed character offsets.  The model is instructed
+ * to return raw JSON only; this function strips any accidental markdown fences and
+ * parses the result before returning it.
+ *
+ * @param bookText - Raw full text of the book (no length limit enforced here;
+ *   `max_tokens` is set to 16 000 on the response side).
+ * @param title - Book title forwarded to the model to anchor its analysis.
+ * @returns A {@link StoryBible} describing characters, locations, scenes
+ *   (with `start_char`/`end_char` offsets), art direction, and `book_length`
+ *   (character count of the original text).
+ * @throws {Error} If Claude returns no text block or if the JSON cannot be parsed.
+ */
 export async function buildStoryBible(bookText: string, title: string): Promise<StoryBible> {
   const response = await getAnthropic().messages.create({
     model: CLAUDE_MODEL,
