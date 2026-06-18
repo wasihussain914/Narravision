@@ -17,13 +17,28 @@ Your role:
 
 Be conversational, insightful, and helpful while maintaining strict spoiler-free boundaries.`;
 
+/**
+ * Input parameters for the Q&A ask endpoint.
+ *
+ * All fields must be scoped to the reader's current position so the spoiler
+ * filter can do its job correctly.
+ */
 interface QAInput {
+  /** The full parsed story bible (characters, scenes, locations, art direction). */
   bible: StoryBible;
+  /** The scene the reader is currently viewing — sets the spoiler cutoff. */
   scene: Scene;
+  /** Raw book text as a single string; sliced by `scene.start_char`/`end_char`. */
   bookText: string;
+  /** The reader's free-text question about the story. */
   question: string;
 }
 
+/**
+ * Returns only the entities (characters or locations) whose `first_appears_at`
+ * character offset falls at or before `sceneEndChar`, guaranteeing that nothing
+ * introduced after the reader's current position leaks into the Q&A context.
+ */
 function filterEntities<T extends { name: string; first_appears_at: number }>(
   all: T[],
   sceneEndChar: number,
@@ -31,6 +46,22 @@ function filterEntities<T extends { name: string; first_appears_at: number }>(
   return all.filter((e) => e.first_appears_at <= sceneEndChar);
 }
 
+/**
+ * Assembles the spoiler-free context block that is passed to Claude as a
+ * cached system prompt alongside `QA_SYSTEM_PROMPT`.
+ *
+ * The block includes: book title, art direction, characters/locations whose
+ * `first_appears_at` ≤ `scene.end_char`, a progress indicator, summaries of
+ * all scenes up to and including `scene.id`, and the raw scene text slice.
+ * Because the block is sent with `cache_control: { type: "ephemeral" }`, it is
+ * cached for the duration of a reading session, so repeated questions about
+ * the same scene do not re-tokenise the full context.
+ *
+ * @param bible  - Parsed story bible from `lib/store.ts`.
+ * @param scene  - The scene currently displayed to the reader (sets spoiler cutoff).
+ * @param bookText - Full raw book text; sliced to `[scene.start_char, scene.end_char]`.
+ * @returns A multi-line string ready to be embedded in the system prompt array.
+ */
 function buildSpoilerFreeContext(bible: StoryBible, scene: Scene, bookText: string): string {
   // Only include scenes up to and including the current one
   const knownScenes = bible.scenes.filter((s) => s.id <= scene.id);
@@ -76,6 +107,22 @@ function buildSpoilerFreeContext(bible: StoryBible, scene: Scene, bookText: stri
   return contextParts.join("\n");
 }
 
+/**
+ * Answers a reader's question about the story, strictly confined to events and
+ * characters introduced up to the current scene (no spoilers).
+ *
+ * Flow:
+ * 1. Calls `buildSpoilerFreeContext` to assemble a cached system-prompt block.
+ * 2. Sends a two-part system prompt to Claude: the static instruction text
+ *    (`QA_SYSTEM_PROMPT`) followed by the dynamic context block marked
+ *    `cache_control: ephemeral` — so repeated questions within the same session
+ *    skip re-tokenising the entire scene/character context.
+ * 3. Returns the first text block from Claude's response, trimmed.
+ *
+ * @param params - {@link QAInput} with bible, scene, bookText, and question.
+ * @returns Claude's answer as a plain string.
+ * @throws {Error} If Claude returns a response with no text content block.
+ */
 export async function answerQuestion({
   bible,
   scene,
