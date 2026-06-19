@@ -102,6 +102,12 @@ book-vision/
 
 ---
 
+## Contributing
+
+Bug reports and feature ideas are welcome — please [open an issue](https://github.com/wasihussain914/Narravision/issues) first so we can discuss before you send a PR. Keep changes focused and include a brief description of what problem they solve.
+
+---
+
 ## Notes
 
 - Generated images are cached at `public/images/<hash>.png`; narration audio at `public/audio/<hash>.mp3`. Delete these directories to regenerate.
