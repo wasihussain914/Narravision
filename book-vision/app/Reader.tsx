@@ -1045,6 +1045,7 @@ function ChatPanel({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask a question..."
+                aria-label="Ask a question about this scene"
                 disabled={loading}
                 className="flex-1 rounded-lg border border-[var(--paper-border)] bg-[var(--paper)] px-3 py-2 text-[12px] text-[var(--foreground)] placeholder-[var(--paper-faint)] outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-50"
               />
