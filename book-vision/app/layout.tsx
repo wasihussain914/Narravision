@@ -20,6 +20,14 @@ const sourceSerif = Source_Serif_4({
 export const metadata: Metadata = {
   title: "Book Vision",
   description: "Illustrated reading experience powered by Claude + Gemini",
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
 };
 
 export default function RootLayout({
